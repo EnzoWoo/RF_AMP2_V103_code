@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------------
+by Kang Woo Jung: 2018.11.28
+
+-----------------------------------------------------------------------*/
+#include "usr.h"
+#include "fnd.h"
+
+const u8 FND_CHA[]={
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x00~0x07
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x08~0x0f
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x10~0x17
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x18~0x1f
+	0x00, 0x86, 0x22, 0x00, 0x00, 0x00, 0x00, 0x02,  // 0x20~0x27  " !"#$%&'"
+	0x39, 0x0f, 0x40, 0x46, 0x80, 0x40, 0x80, 0x52,  // 0x28~0x2f  "'()*+,-./"
+	0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x27,  // 0x30~0x37  "01234567"
+	0x7f, 0x6f, 0x30, 0xb0, 0xb9, 0x09, 0x8f, 0xd3,  //  0x38~0x3f  "89:;<=>?
+	0x7b, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, 0x3d,  // 0x40~0x47  "@ABCDEFG"
+	0x76, 0x30, 0x1e, 0x75, 0x38, 0x55, 0x37, 0x3f,  // 0x48~0x4f  "HIJKLMNO"
+	0x73, 0x67, 0x31, 0x6d, 0x31, 0x3e, 0xbe, 0x6a,  // 0x50~0x57  "PQRSTUVW "
+	0xf6, 0x6e, 0x1b, 0x39, 0xea, 0x0f, 0x21, 0x08,  // 0x58~0x5f  "XYZ[\]^_"
+	0x20, 0x5f, 0x7c, 0x58, 0x5e, 0x7b, 0x71, 0x6f,  // 0x60~0x67  "`abcdefg"
+	0x74, 0x10, 0x0e, 0x75, 0x38, 0x55, 0x54, 0x5c,  // 0x68~0x6f  "hijklmno"
+	0x73, 0x67, 0x50, 0x6c, 0x78, 0x1c, 0x9c, 0x6a,  // 0x70~0x77  "pqrstuvw"
+	0xf6, 0x72, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0x78~0x7f  "xyz{|}~ "
+};
+
+uint8_t fnd_buf[DIGIT_SIZE+1]; // dummy 1byte
+
+
+
+void fnd_process(void)
+{
+  static uint16_t step;
+  static evt_t evtd;
+	
+	
+  if(evt_us(&evtd, 1000)){
+		//SPI_CS = 0;
+		//if(HAL_SPI_Transmit(&hspi2,fnd_buf,4,1) == HAL_OK) SPI_CS = 1;
+		
+		//SEG drive
+		/*
+		FND_DATA_OUT(0);
+		FND_DRV0 = ~(fnd_buf[0]>>step);
+		FND_DRV1 = ~(fnd_buf[1]>>step);
+		FND_DRV2 = ~(fnd_buf[2]>>step);
+		SEG(1<<step);
+		step++;
+		step &= 7;
+		*/
+		
+		//DIGIT drive
+		switch(step){
+		//case 0:	DIGIT2 = 0;	SEG_OUT(fnd[step]);	DIGIT0 = 1;	step++; break;
+		//case 1:	DIGIT0 = 0;	SEG_OUT(fnd[step]);	DIGIT1 = 1;	step++;	break;
+		//case 2:	DIGIT1 = 0;	SEG_OUT(fnd[step]);	DIGIT2 = 1;	step=0;	break;
+		case 0:	FND_DRIVE0();	step++; break;
+		case 1:	FND_DRIVE1();	step++; break;
+		case 2:	FND_DRIVE2();	step=0; break;
+		default: step=0; FND_DRV0=FND_DRV1=FND_DRV2=0; break;
+		}
+  }
+}
+
+void fnd_img(uint8_t *img)
+{
+	for(uint16_t i=0 ; i<DIGIT_SIZE ; i++){
+		fnd_buf[i] = img[i];
+	}
+}
+
+void fnd_printf(uint16_t seg_mode, uint16_t digit, const uint8_t *fmt,...)
+{
+	uint8_t str[64];
+	va_list ap;
+	
+	if(digit >= DIGIT_SIZE) return;
+	
+	va_start(ap, fmt);
+	vsprintf((char *) str,(const char *)fmt, ap);
+	va_end(ap);
+
+	uint16_t i=0;
+	while(str[i]){
+		if(seg_mode == SEG8){
+			if(str[i] == '.'){
+				TypeFND(fnd_buf[digit]).dot = 1;
+				i++;
+			}
+			else {
+				fnd_buf[digit] = FND_CHA[str[i++]];
+				if(str[i] == '.'){
+					TypeFND(fnd_buf[digit]).dot = 1;
+					i++;
+				}
+			}
+		}
+		else {
+		  TypeFND(fnd_buf[digit]).seg = FND_CHA[str[i++]];
+		}
+		if(++digit >= DIGIT_SIZE) break;
+	}
+}
+
+//----------------------------------------- for printf()
+/* printf() 포맷 지정자
+%c    charactor
+%d    부호있는 int
+%e, %E    과학적표기법
+%f      float
+%g, %G    %e,%f 중 단순한 것으로 선택해서 출력
+%s   string
+%u   부호없는 int
+%x   hex
+%X   HEX
+%p   pointer
+*/
+
